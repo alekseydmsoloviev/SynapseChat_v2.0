@@ -16,7 +16,9 @@ from pydantic import BaseModel
 router = APIRouter()
 
 class SessionInfo(BaseModel):
-    session_id: str
+
+    session_id: int
+
     name: str
     created_at: str  # ISO datetime as string
 
@@ -33,7 +35,7 @@ def list_sessions(username: str = Depends(get_current_username), db: Session = D
 
 @router.get("/{session_id}", response_model=List[MessageInfo])
 def get_session_messages(
-    session_id: str,
+    session_id: int,
     username: str = Depends(get_current_username),
     db: Session = Depends(get_db),
 ) -> List[MessageInfo]:
@@ -55,7 +57,7 @@ def get_session_messages(
 
 @router.delete("/{session_id}")
 def delete_session(
-    session_id: str,
+    session_id: int,
     username: str = Depends(get_current_username),
     db: Session = Depends(get_db),
 ):

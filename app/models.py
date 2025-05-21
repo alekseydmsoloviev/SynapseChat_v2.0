@@ -16,7 +16,9 @@ class Model(Base):
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
-    id        = Column(String, primary_key=True, index=True)
+
+    id        = Column(Integer, primary_key=True, index=True, autoincrement=True)
+
     user_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
     model_id  = Column(Integer, ForeignKey("models.id"), nullable=False)
     name      = Column(String, nullable=False)
@@ -25,7 +27,9 @@ class ChatSession(Base):
 class Message(Base):
     __tablename__ = "messages"
     id        = Column(Integer, primary_key=True, index=True)
-    chat_id   = Column(String, ForeignKey("chat_sessions.id"), nullable=False)
+
+    chat_id   = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
+
     sender    = Column(String, nullable=False)  # 'user' or 'ai'
     content   = Column(String, nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())

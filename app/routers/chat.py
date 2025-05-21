@@ -19,7 +19,7 @@ def get_db():
 
 @router.post("/{session_id}")
 def send_message(
-    session_id: str,
+    session_id: int,
     payload: dict,
     username: str = Depends(get_current_username),
     db: Session = Depends(get_db)
@@ -40,18 +40,18 @@ def send_message(
     # Создаем новую сессию, если её ещё нет
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
-        session = ChatSession(
-            id=session_id,
-            user_id=user.id,
-            model_id=model.id,
-            name=payload.get("chat_name", session_id)
-        )
+        session = ChatSession(user_id=user.id, model_id=model.id, name="")
+
         db.add(session)
+        db.commit()
+        db.refresh(session)
+        session.name = f"{username}{session.id}"
         db.commit()
 
     # Сохраняем сообщение пользователя
     user_msg = Message(
-        chat_id=session_id,
+        chat_id=session.id,
+
         sender="user",
         content=payload["prompt"]
     )
@@ -60,18 +60,22 @@ def send_message(
 
     # Запрос к модели
     response_text = chat(
-        session_id=session_id,
+
+        session_id=str(session.id),
+
         model=model.name,
         prompt=payload["prompt"]
     )
 
     # Сохраняем ответ модели
     bot_msg = Message(
-        chat_id=session_id,
+
+        chat_id=session.id,
+
         sender="ai",
         content=response_text
     )
     db.add(bot_msg)
     db.commit()
 
-    return {"response": response_text}
+    return {"response": response_text, "session_id": session.id, "chat_name": session.name}
