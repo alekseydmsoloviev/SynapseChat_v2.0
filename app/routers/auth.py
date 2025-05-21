@@ -27,14 +27,14 @@ def get_current_username(
     """
     Проверяет Basic Auth данные и возвращает имя пользователя.
     """
-    user = db.query(User).filter(User.username == credentials.username).first()
-    if not user or not secrets.compare_digest(credentials.password, user.password_hash):
+    user = db.query(User).filter(User.login == credentials.username).first()
+    if not user or not secrets.compare_digest(credentials.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверные имя пользователя или пароль",
             headers={"WWW-Authenticate": "Basic"},
         )
-    return user.username
+    return user.login
 
 
 @router.get("/ping")

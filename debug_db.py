@@ -4,5 +4,5 @@ from app.models import User
 
 db = SessionLocal()
 for u in db.query(User).all():
-    print(f"username='{u.username}', password_hash='{u.password_hash}'")
+    print(f"login='{u.login}', password='{u.password}'")
 db.close()

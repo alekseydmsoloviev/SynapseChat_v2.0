@@ -4,7 +4,6 @@ import typer
 import subprocess
 import webbrowser
 from dotenv import load_dotenv, set_key
-from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from app.database import engine, Base, SessionLocal
 from app.models import User
@@ -20,35 +19,20 @@ def main():
     """
     load_dotenv()
 
-    # 1) Миграция схемы: users → is_admin, daily_limit
-    insp = inspect(engine)
-    if "users" in insp.get_table_names():
-        cols = [c["name"] for c in insp.get_columns("users")]
-        with engine.connect() as conn:
-            if "is_admin" not in cols:
-                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
-            if "daily_limit" not in cols:
-                conn.execute(text("ALTER TABLE users ADD COLUMN daily_limit INTEGER DEFAULT 1000"))
-
-    # 2) Создание таблиц rate_limits, sessions, messages, если не созданы
+    # Создание таблиц, если не созданы
     Base.metadata.create_all(bind=engine)
 
     # 3) Первый запуск — создание админа и выбор портов
     db: Session = SessionLocal()
     try:
-        admin = db.query(User).filter(User.is_admin == True).first()
+        admin = db.query(User).first()
         if not admin:
             typer.secho("Создание администратора:", fg=typer.colors.YELLOW)
-            name = typer.prompt("Admin username")
+            name = typer.prompt("Admin login")
             pwd  = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
             admin_port = typer.prompt("Admin panel port", default="8080")
             api_port   = typer.prompt("API server port", default="9000")
-            admin = User(
-                username=name,
-                password_hash=pwd,
-                is_admin=True,
-                daily_limit=0  # администратор без ограничений
-            )
+            admin = User(login=name, password=pwd)
             db.add(admin)
             db.commit()
             # Сохраняем порты
