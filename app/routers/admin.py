@@ -14,7 +14,7 @@ from dotenv import load_dotenv, dotenv_values, set_key
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import User, RateLimit, Session as SessionModel, Message
+from app.models import User, ChatSession, Model, Message
 from app.utils.ollama import list_installed_models, remove_model
 
 router = APIRouter()
@@ -30,19 +30,14 @@ def get_current_admin(
     creds: HTTPBasicCredentials = Depends(security)
 ):
     db: Session = SessionLocal()
-    user = db.query(User).filter(User.username == creds.username).first()
+    user = db.query(User).filter(User.login == creds.username).first()
     db.close()
-    if not user or not secrets.compare_digest(creds.password, user.password_hash):
+    if not user or not secrets.compare_digest(creds.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверные креденшлы"
         )
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Только администратор"
-        )
-    return user.username
+    return user.login
 
 
 @router.on_event("startup")
@@ -68,17 +63,16 @@ def dashboard(
 ):
     cfg    = dotenv_values(ENV_PATH)
     port   = cfg.get("PORT", os.getenv("PORT", "8000"))
-    limit  = cfg.get("DAILY_LIMIT", os.getenv("DAILY_LIMIT", "1000"))
 
     db: Session = SessionLocal()
     try:
         users     = db.query(User).all()
         models    = list_installed_models()
-        sessions  = db.query(SessionModel).order_by(SessionModel.created_at.desc()).all()
+        sessions  = db.query(ChatSession).order_by(ChatSession.created_at.desc()).all()
         msg_counts = {
-            s.session_id: db.query(Message)
-                             .filter(Message.session_id == s.session_id)
-                             .count()
+            s.id: db.query(Message)
+                       .filter(Message.chat_id == s.id)
+                       .count()
             for s in sessions
         }
     finally:
@@ -87,7 +81,6 @@ def dashboard(
     return templates.TemplateResponse("admin.html", {
         "request":    request,
         "port":       port,
-        "limit":      limit,
         "users":      users,
         "models":     models,
         "sessions":   sessions,
@@ -98,35 +91,26 @@ def dashboard(
 @router.post("/admin/config")
 def update_config(
     port: str = Form(...),
-    limit: str = Form(...),
     admin: str  = Depends(get_current_admin)
 ):
     open(ENV_PATH, "a").close()
     set_key(ENV_PATH, "PORT", port)
-    set_key(ENV_PATH, "DAILY_LIMIT", limit)
     return RedirectResponse("/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/admin/user")
 def create_or_update_user(
-    username_new: str = Form(...),
+    login_new: str = Form(...),
     password_new: str = Form(...),
-    daily_limit: int   = Form(...),
     admin: str         = Depends(get_current_admin)
 ):
     db: Session = SessionLocal()
     try:
-        u = db.query(User).filter(User.username == username_new).first()
+        u = db.query(User).filter(User.login == login_new).first()
         if u:
-            u.password_hash = password_new
-            u.daily_limit   = daily_limit
+            u.password = password_new
         else:
-            u = User(
-                username=username_new,
-                password_hash=password_new,
-                is_admin=False,
-                daily_limit=daily_limit
-            )
+            u = User(login=login_new, password=password_new)
             db.add(u)
         db.commit()
     finally:
@@ -136,16 +120,14 @@ def create_or_update_user(
 
 @router.post("/admin/user/delete")
 def delete_user(
-    username_del: str = Form(...),
+    login_del: str = Form(...),
     admin: str        = Depends(get_current_admin)
 ):
     db: Session = SessionLocal()
     try:
-        user = db.query(User).filter(User.username == username_del).first()
+        user = db.query(User).filter(User.login == login_del).first()
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
-        if user.is_admin:
-            raise HTTPException(status_code=403, detail="Нельзя удалять администратора")
         db.delete(user)
         db.commit()
     finally:
@@ -161,8 +143,8 @@ def clear_database(
     db: Session = SessionLocal()
     try:
         db.query(Message).delete()
-        db.query(SessionModel).delete()
-        db.query(RateLimit).delete()
+        db.query(ChatSession).delete()
+        db.query(Model).delete()
         db.query(User).delete()
         db.commit()
     finally:

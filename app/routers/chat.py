@@ -1,9 +1,8 @@
 # app/routers/chat.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import RateLimit, User, Session as SessionModel, Message
+from app.models import User, Model, ChatSession, Message
 from app.routers.auth import get_current_username
 from app.utils.ollama import chat
 
@@ -16,56 +15,42 @@ def get_db():
     finally:
         db.close()
 
-def check_and_increment_limit(db: Session, username: str):
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user.is_admin:
-        return  # админ без ограничений
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    rl = db.query(RateLimit).filter(
-        RateLimit.username == username,
-        RateLimit.date == today
-    ).first()
-    if not rl:
-        rl = RateLimit(username=username, date=today, count=0)
-        db.add(rl)
-        db.commit()
-        db.refresh(rl)
-
-    if rl.count >= user.daily_limit:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Daily request limit reached"
-        )
-
-    rl.count += 1
-    db.commit()
 
 
 @router.post("/{session_id}")
 def send_message(
-    session_id: str,
+    session_id: int,
     payload: dict,
     username: str = Depends(get_current_username),
     db: Session = Depends(get_db)
 ):
-    # Проверяем и инкрементируем лимит перед запросом к модели
-    check_and_increment_limit(db, username)
+    # Получаем пользователя
+    user = db.query(User).filter(User.login == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Получаем или создаем модель
+    model = db.query(Model).filter(Model.name == payload["model"]).first()
+    if not model:
+        model = Model(name=payload["model"])
+        db.add(model)
+        db.commit()
+        db.refresh(model)
 
     # Создаем новую сессию, если её ещё нет
-    session = db.query(SessionModel).filter(SessionModel.session_id == session_id).first()
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
-        session = SessionModel(session_id=session_id)
+        session = ChatSession(user_id=user.id, model_id=model.id, name="")
         db.add(session)
+        db.commit()
+        db.refresh(session)
+        session.name = f"{username}{session.id}"
         db.commit()
 
     # Сохраняем сообщение пользователя
     user_msg = Message(
-        session_id=session_id,
-        role="user",
-        model=payload["model"],
+        chat_id=session.id,
+        sender="user",
         content=payload["prompt"]
     )
     db.add(user_msg)
@@ -73,19 +58,18 @@ def send_message(
 
     # Запрос к модели
     response_text = chat(
-        session_id=session_id,
-        model=payload["model"],
+        session_id=str(session.id),
+        model=model.name,
         prompt=payload["prompt"]
     )
 
     # Сохраняем ответ модели
     bot_msg = Message(
-        session_id=session_id,
-        role="assistant",
-        model=payload["model"],
+        chat_id=session.id,
+        sender="ai",
         content=response_text
     )
     db.add(bot_msg)
     db.commit()
 
-    return {"response": response_text}
+    return {"response": response_text, "session_id": session.id, "chat_name": session.name}

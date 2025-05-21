@@ -1,31 +1,31 @@
 # app/models.py
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from .database import Base
 
 class User(Base):
     __tablename__ = "users"
-    username      = Column(String,  primary_key=True, index=True)
-    password_hash = Column(String,  nullable=False)
-    is_admin      = Column(Boolean, default=False)
-    daily_limit   = Column(Integer, default=1000)
+    id       = Column(Integer, primary_key=True, index=True)
+    login    = Column(String, unique=True, nullable=False)
+    password = Column(String, nullable=False)
 
-class RateLimit(Base):
-    __tablename__ = "rate_limits"
-    username = Column(String, ForeignKey("users.username"), primary_key=True)
-    date     = Column(String,               primary_key=True)  # YYYY-MM-DD
-    count    = Column(Integer, default=0)
+class Model(Base):
+    __tablename__ = "models"
+    id   = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
 
-class Session(Base):
-    __tablename__ = "sessions"
-    session_id = Column(String, server_default=func.random(), primary_key=True, index=True)
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    id        = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
+    model_id  = Column(Integer, ForeignKey("models.id"), nullable=False)
+    name      = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Message(Base):
     __tablename__ = "messages"
-    id         = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String,  nullable=False, index=True)
-    role       = Column(String,  nullable=False)
-    model      = Column(String,  nullable=False)
-    content    = Column(String,  nullable=False)
-    timestamp  = Column(DateTime(timezone=True), server_default=func.now())
+    id        = Column(Integer, primary_key=True, index=True)
+    chat_id   = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
+    sender    = Column(String, nullable=False)  # 'user' or 'ai'
+    content   = Column(String, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
