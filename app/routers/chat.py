@@ -41,6 +41,7 @@ def send_message(
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
         session = ChatSession(user_id=user.id, model_id=model.id, name="")
+
         db.add(session)
         db.commit()
         db.refresh(session)
@@ -50,6 +51,7 @@ def send_message(
     # Сохраняем сообщение пользователя
     user_msg = Message(
         chat_id=session.id,
+
         sender="user",
         content=payload["prompt"]
     )
@@ -58,14 +60,18 @@ def send_message(
 
     # Запрос к модели
     response_text = chat(
+
         session_id=str(session.id),
+
         model=model.name,
         prompt=payload["prompt"]
     )
 
     # Сохраняем ответ модели
     bot_msg = Message(
+
         chat_id=session.id,
+
         sender="ai",
         content=response_text
     )

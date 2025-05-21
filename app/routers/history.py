@@ -16,7 +16,9 @@ from pydantic import BaseModel
 router = APIRouter()
 
 class SessionInfo(BaseModel):
+
     session_id: int
+
     name: str
     created_at: str  # ISO datetime as string
 
